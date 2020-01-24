@@ -22,3 +22,6 @@ typedef struct inode
   uint64_t data_ptr;
   uint64_t next_ptr;
 } inode;
+
+filesystem* create_filesystem(const char* filename, uint64_t size);
+void destroy_filesystem(filesystem** fs);
