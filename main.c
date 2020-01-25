@@ -21,6 +21,9 @@ int main()
   heap_print_info(fs->mem);
   filesystem_print_tree(fs);
 
+  printf("Filesystem size: %ldb\nMemory used: %ldb (%.2f%%)\n", 
+    fs->size, fs->used, 100.0f*fs->used/fs->size);
+
   filesystem_get_file(fs, "test1.txt", "test1.txt");
   filesystem_get_file(fs, "test2.txt", "test2.txt");
   filesystem_get_file(fs, "dir1/test1.txt", "test_dir1.txt");

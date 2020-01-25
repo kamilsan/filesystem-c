@@ -63,27 +63,37 @@ int directory_filename_split(const char* path, char** directory, char** filename
 
 void print_dir(heap_node* node, int pad)
 {
+  inode* i = (inode*)node->data;
+  for(int i = 0; i < pad; ++i)
+      putchar(' ');
+  printf("\033[34;1m%s\033[0m\n", i->name); //NOTE: this works only on linux
+  pad += 2;
+  
   heap_node* file_node = node->data_segment;
   while(file_node)
   {
-    inode* i = (inode*)file_node->data;
-    for(int i = 0; i < pad; ++i)
-      putchar(' ');
-    puts(i->name);
-    
-    if(i->flag == INODE_DIR)
-      print_dir(file_node, pad + 2);
+    i = (inode*)file_node->data;
+    if(i->flag == INODE_FILE)
+    {
+      for(int i = 0; i < pad; ++i)
+        putchar(' ');
+      printf("%s (%ldb)\n", i->name, i->size);
+    }
+    else if(i->flag == INODE_DIR)
+    {
+      print_dir(file_node, pad);
+    }
 
     file_node = file_node->next_file_segment;
   }
 }
-
 
 heap_node* make_subdirectory(filesystem* fs, heap_node* parent, const char* name)
 {
   puts(((inode*)parent->data)->name);
 
   heap_node* heap_inode = heap_alloc(fs->mem, sizeof(inode));
+  fs->used += sizeof(inode);
   inode* file_inode = (inode*)calloc(1, sizeof(inode));
   file_inode->flag = INODE_DIR;
   strcpy(file_inode->name, name);
@@ -123,13 +133,6 @@ heap_node* make_subdirectory(filesystem* fs, heap_node* parent, const char* name
   return heap_inode;
 }
 
-void filesystem_print_tree(filesystem* fs)
-{
-  heap_node* root = fs->mem->root;
-  puts(((inode*)root->data)->name);
-  print_dir(root, 2);
-}
-
 void make_file(filesystem* fs, const char* path, void* buffer, uint64_t size)
 {
   char* directory = NULL;
@@ -148,6 +151,7 @@ void make_file(filesystem* fs, const char* path, void* buffer, uint64_t size)
   inode* last_inode = (inode*)last_node->data;
 
   heap_node* heap_inode = heap_alloc(fs->mem, sizeof(inode));
+  fs->used += sizeof(inode);
   inode* file_inode = (inode*)calloc(1, sizeof(inode));
   file_inode->flag = INODE_FILE;
   strcpy(file_inode->name, filename);
@@ -160,6 +164,7 @@ void make_file(filesystem* fs, const char* path, void* buffer, uint64_t size)
   free(filename);
 
   heap_node* heap_data = heap_alloc(fs->mem, size);
+  fs->used += size;
   heap_data->data = buffer;
   file_inode->data_ptr = heap_data->file_offset;
   heap_inode->data_segment = heap_data;
@@ -209,6 +214,12 @@ heap_node* find_file(filesystem* fs, const char* path)
 }
 
 
+void filesystem_print_tree(filesystem* fs)
+{
+  heap_node* root = fs->mem->root;
+  print_dir(root, 0);
+}
+
 filesystem* create_filesystem(const char* filename, uint64_t size)
 {
   filesystem* fs = (filesystem*)malloc(sizeof(filesystem));
@@ -220,6 +231,7 @@ filesystem* create_filesystem(const char* filename, uint64_t size)
   fs->mem = create_heap(size);
 
   heap_node* node = heap_alloc(fs->mem, sizeof(inode));
+  fs->used += sizeof(inode);
   inode* root_node = (inode*)calloc(1, sizeof(inode));
   root_node->flag = INODE_DIR;
   strcpy(root_node->name, "/");
