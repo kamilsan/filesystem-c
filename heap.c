@@ -7,10 +7,12 @@
 heap_node* create_heap_node(uint64_t size, uint64_t offset)
 {
   heap_node* node = (heap_node*)malloc(sizeof(heap_node));
-  node->inUse = 0;
+  node->in_use = 0;
   node->size = size;
   node->file_offset = offset;
-  node->data = malloc(size);
+  node->data = NULL;
+  node->data_segment = NULL;
+  node->next_file_segment = NULL;
   node->next = NULL;
 
   return node;
@@ -34,13 +36,14 @@ void destroy_heap(heap** mem)
   {
     temp = node;
     node = node->next;
-    free(temp->data);
+    if(temp->data)
+      free(temp->data);
     free(temp);
   }
   free(*mem);
 }
 
-void print_heap_info(heap* mem)
+void heap_print_info(heap* mem)
 {
   printf("Heap size: %ld (%ld used)\n", mem->size, mem->used);
   heap_node* node = mem->root;
@@ -48,9 +51,44 @@ void print_heap_info(heap* mem)
   while(node)
   {
     printf("Segment #%d:\n", segment_num++);
-    printf("\tIn use: %d\n", node->inUse);
+    printf("\tIn use: %d\n", node->in_use);
     printf("\tSize: %ld\n", node->size);
     printf("\tFile offset: %ld\n", node->file_offset);
     node = node->next;
   }
+}
+
+heap_node* heap_alloc(heap* mem, uint64_t size)
+{
+  if(mem->size - mem->used < size)
+    return NULL;
+  
+  heap_node* node = mem->root;
+  heap_node* prev = NULL;
+  while(node)
+  {
+    if(!node->in_use && node->size >= size)
+    {
+      uint64_t offset = node->file_offset;
+      if(node->in_use)
+        offset += node->size;
+      heap_node* new_node = create_heap_node(size, offset);
+      new_node->in_use = 1;
+      new_node->next = node;
+      node->size -= size;
+      node->file_offset += size;
+      if(prev)
+        prev->next = new_node;
+      else
+        mem->root = new_node;
+
+      mem->used += size;
+      return new_node;
+    }
+    
+    prev = node;
+    node = node->next;
+  }
+
+  return NULL;
 }
