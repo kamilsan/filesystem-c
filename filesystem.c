@@ -78,12 +78,58 @@ void print_dir(heap_node* node, int pad)
   }
 }
 
+
+heap_node* make_subdirectory(filesystem* fs, heap_node* parent, const char* name)
+{
+  puts(((inode*)parent->data)->name);
+
+  heap_node* heap_inode = heap_alloc(fs->mem, sizeof(inode));
+  inode* file_inode = (inode*)calloc(1, sizeof(inode));
+  file_inode->flag = INODE_DIR;
+  strcpy(file_inode->name, name);
+  file_inode->size = 0;
+  file_inode->next_ptr = 0;
+  file_inode->data_ptr = 0;
+  heap_inode->data = file_inode;
+
+  heap_node* last_node = parent;
+  if(last_node->data_segment)
+  {
+    last_node = last_node->data_segment;
+    while(last_node->next_file_segment)
+      last_node = last_node->next_file_segment;
+  }
+  inode* last_inode = (inode*)last_node->data;
+
+  if(last_node == parent)
+  {
+    last_node->data_segment = heap_inode;
+    last_inode->data_ptr = heap_inode->file_offset;
+  }
+  else
+  {
+    last_node->next_file_segment = heap_inode;
+    last_inode->next_ptr = heap_inode->file_offset;
+  }
+  
+  FILE* fp = fopen(fs->file, "r+b");
+  fseek(fp, last_node->file_offset, SEEK_SET);
+  fwrite(last_inode, sizeof(inode), 1, fp);
+  
+  fseek(fp, heap_inode->file_offset, SEEK_SET);
+  fwrite(file_inode, sizeof(inode), 1, fp);
+  fclose(fp);
+
+  return heap_inode;
+}
+
 void filesystem_print_tree(filesystem* fs)
 {
   heap_node* root = fs->mem->root;
   puts(((inode*)root->data)->name);
   print_dir(root, 2);
 }
+
 
 filesystem* create_filesystem(const char* filename, uint64_t size)
 {
@@ -96,7 +142,7 @@ filesystem* create_filesystem(const char* filename, uint64_t size)
   fs->mem = create_heap(size);
 
   heap_node* node = heap_alloc(fs->mem, sizeof(inode));
-  inode* root_node = (inode*)malloc(sizeof(inode));
+  inode* root_node = (inode*)calloc(1, sizeof(inode));
   root_node->flag = INODE_DIR;
   strcpy(root_node->name, "/");
   root_node->next_ptr = 0;
@@ -116,11 +162,10 @@ filesystem* create_filesystem(const char* filename, uint64_t size)
 
 void filesystem_add_file(filesystem* fs, const char* path, const char* source)
 {
-  // 1. Read file data 
   FILE* ifp = fopen(source, "rb");
   fseek(ifp, 0, SEEK_END);
   uint64_t size = ftell(ifp);
-  void* buffer = malloc(size);
+  void* buffer = calloc(1, size);
   fseek(ifp, 0, SEEK_SET);
   fread(buffer, size, 1, ifp);
   fclose(ifp);
@@ -129,19 +174,19 @@ void filesystem_add_file(filesystem* fs, const char* path, const char* source)
   char* filename = NULL;
   int res = directory_filename_split(path, &directory, &filename);
 
-  // 2. Find last inode segment
   heap_node* last_node = res == 0 ? find_directory(fs, directory) : fs->mem->root;
+  int dir_empty = 1;
   if(last_node->data_segment)
   {
+    dir_empty = 0;
     last_node = last_node->data_segment;
     while(last_node->next_file_segment)
       last_node = last_node->next_file_segment;
   }
   inode* last_inode = (inode*)last_node->data;
 
-  // 3. Allocate space for inode
   heap_node* heap_inode = heap_alloc(fs->mem, sizeof(inode));
-  inode* file_inode = (inode*)malloc(sizeof(inode));
+  inode* file_inode = (inode*)calloc(1, sizeof(inode));
   file_inode->flag = INODE_FILE;
   strcpy(file_inode->name, filename);
   file_inode->size = size;
@@ -152,14 +197,12 @@ void filesystem_add_file(filesystem* fs, const char* path, const char* source)
     free(directory);
   free(filename);
 
-  // 4. Allocate space for file data
   heap_node* heap_data = heap_alloc(fs->mem, size);
   heap_data->data = buffer;
   file_inode->data_ptr = heap_data->file_offset;
   heap_inode->data_segment = heap_data;
 
-  // 5. Modify previous inode, by changing the pointer
-  if(last_inode->flag == INODE_DIR)
+  if(dir_empty)
   {
     last_node->data_segment = heap_inode;
     last_inode->data_ptr = heap_inode->file_offset;
@@ -170,12 +213,10 @@ void filesystem_add_file(filesystem* fs, const char* path, const char* source)
     last_inode->next_ptr = heap_inode->file_offset;
   }
   
-  // 6. Save the modification in file
   FILE* fp = fopen(fs->file, "r+b");
   fseek(fp, last_node->file_offset, SEEK_SET);
   fwrite(last_inode, sizeof(inode), 1, fp);
   
-  // 7. Save allocated blocks for inode and data to a file
   fseek(fp, heap_inode->file_offset, SEEK_SET);
   fwrite(file_inode, sizeof(inode), 1, fp);
   fseek(fp, heap_data->file_offset, SEEK_SET);
@@ -214,45 +255,20 @@ void filesystem_get_file(filesystem* fs, const char* path, const char* destinati
 
 void filesystem_make_directory(filesystem* fs, const char* name)
 {
-  // 1. Allocate space for inode
-  heap_node* heap_inode = heap_alloc(fs->mem, sizeof(inode));
-  inode* file_inode = (inode*)malloc(sizeof(inode));
-  file_inode->flag = INODE_DIR;
-  strcpy(file_inode->name, name);
-  file_inode->size = 0;
-  file_inode->next_ptr = 0;
-  file_inode->data_ptr = 0;
-  heap_inode->data = file_inode;
+  uint64_t name_len = strlen(name) + 1;
+  char* copy = (char*)malloc(name_len * sizeof(char));
+  strcpy(copy, name);
 
-  // 2. Find last inode segment
-  heap_node* last_node = fs->mem->root;
-  if(last_node->data_segment)
-    last_node = last_node->data_segment;
-  while(last_node->next_file_segment)
-    last_node = last_node->next_file_segment;
-  inode* last_inode = (inode*)last_node->data;
+  heap_node* parent = fs->mem->root;
 
-  // 3. Modify it, by changing the pointer
-  if(last_node == fs->mem->root)
+  char* token = strtok(copy, "/");
+  while(token)
   {
-    last_node->data_segment = heap_inode;
-    last_inode->data_ptr = heap_inode->file_offset;
+    parent = make_subdirectory(fs, parent, token);
+    token = strtok(NULL, "/");
   }
-  else
-  {
-    last_node->next_file_segment = heap_inode;
-    last_inode->next_ptr = heap_inode->file_offset;
-  }
-  
-  // 4. Save the modification in file
-  FILE* fp = fopen(fs->file, "r+b");
-  fseek(fp, last_node->file_offset, SEEK_SET);
-  fwrite(last_inode, sizeof(inode), 1, fp);
-  
-  // 5. Save allocated blocks for inode
-  fseek(fp, heap_inode->file_offset, SEEK_SET);
-  fwrite(file_inode, sizeof(inode), 1, fp);
-  fclose(fp);
+
+  free(copy);
 }
 
 void destroy_filesystem(filesystem** fs)
