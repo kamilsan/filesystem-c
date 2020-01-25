@@ -198,6 +198,10 @@ void filesystem_get_file(filesystem* fs, const char* path, const char* destinati
     node = node->next_file_segment;
   }
 
+  if(directory)
+    free(directory);
+  free(filename);
+
   if(!node)
     return;
   
