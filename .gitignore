@@ -1,4 +1,4 @@
 *.o
 program
 sample-files
-test.fs
+test*

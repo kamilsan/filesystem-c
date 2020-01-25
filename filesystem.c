@@ -92,6 +92,27 @@ void filesystem_add_file(filesystem* fs, const char* filename, const char* sourc
   fclose(fp);
 }
 
+void filesystem_get_file(filesystem* fs, const char* filename, const char* destination)
+{
+  heap_node* node = fs->mem->root->data_segment;
+  while(node)
+  {
+    if(strcmp(((inode*)node->data)->name, filename) == 0)
+      break;
+
+    node = node->next_file_segment;
+  }
+
+  if(!node)
+    return;
+  
+  heap_node* file_data_segment = node->data_segment;
+
+  FILE* ofp = fopen(destination, "wb");
+  fwrite(file_data_segment->data, file_data_segment->size, 1, ofp);
+  fclose(ofp);
+}
+
 void destroy_filesystem(filesystem** fs)
 {
   destroy_heap(&(*fs)->mem);
