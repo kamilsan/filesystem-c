@@ -25,8 +25,8 @@ typedef struct filesystem
 
 filesystem* create_filesystem(const char* filename, uint64_t size);
 void filesystem_print_tree(filesystem* fs);
-void filesystem_add_file(filesystem* fs, const char* filename, const char* source);
-void filesystem_get_file(filesystem* fs, const char* filename, const char* destination);
-void filesystem_make_directory(filesystem* fs, const char* filename);
-void filesystem_copy_file(filesystem* fs, const char* src, const char* dst);
+int filesystem_add_file(filesystem* fs, const char* filename, const char* source);
+int filesystem_get_file(filesystem* fs, const char* filename, const char* destination);
+int filesystem_make_directory(filesystem* fs, const char* filename);
+int filesystem_copy_file(filesystem* fs, const char* src, const char* dst);
 void destroy_filesystem(filesystem** fs);
