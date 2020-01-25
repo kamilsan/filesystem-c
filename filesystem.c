@@ -130,46 +130,8 @@ void filesystem_print_tree(filesystem* fs)
   print_dir(root, 2);
 }
 
-
-filesystem* create_filesystem(const char* filename, uint64_t size)
+void make_file(filesystem* fs, const char* path, void* buffer, uint64_t size)
 {
-  filesystem* fs = (filesystem*)malloc(sizeof(filesystem));
-  size_t filename_len = strlen(filename) + 1;
-  fs->file = (char*)malloc(filename_len*sizeof(char));
-  strcpy(fs->file, filename);
-  fs->size = size;
-  fs->used = 0;
-  fs->mem = create_heap(size);
-
-  heap_node* node = heap_alloc(fs->mem, sizeof(inode));
-  inode* root_node = (inode*)calloc(1, sizeof(inode));
-  root_node->flag = INODE_DIR;
-  strcpy(root_node->name, "/");
-  root_node->next_ptr = 0;
-  root_node->data_ptr = 0;
-  node->data = root_node;
-
-  FILE* fp = fopen(filename, "w+b");
-  void* data = calloc(1, size);
-  fwrite(data, size, 1, fp);
-  free(data);
-  fseek(fp, node->file_offset, SEEK_SET);
-  fwrite(root_node, sizeof(inode), 1, fp);
-  fclose(fp);
-
-  return fs;
-}
-
-void filesystem_add_file(filesystem* fs, const char* path, const char* source)
-{
-  FILE* ifp = fopen(source, "rb");
-  fseek(ifp, 0, SEEK_END);
-  uint64_t size = ftell(ifp);
-  void* buffer = calloc(1, size);
-  fseek(ifp, 0, SEEK_SET);
-  fread(buffer, size, 1, ifp);
-  fclose(ifp);
-
   char* directory = NULL;
   char* filename = NULL;
   int res = directory_filename_split(path, &directory, &filename);
@@ -224,7 +186,7 @@ void filesystem_add_file(filesystem* fs, const char* path, const char* source)
   fclose(fp);
 }
 
-void filesystem_get_file(filesystem* fs, const char* path, const char* destination)
+heap_node* find_file(filesystem* fs, const char* path)
 {
   char* directory = NULL;
   char* filename = NULL;
@@ -242,6 +204,56 @@ void filesystem_get_file(filesystem* fs, const char* path, const char* destinati
   if(directory)
     free(directory);
   free(filename);
+
+  return node;
+}
+
+
+filesystem* create_filesystem(const char* filename, uint64_t size)
+{
+  filesystem* fs = (filesystem*)malloc(sizeof(filesystem));
+  size_t filename_len = strlen(filename) + 1;
+  fs->file = (char*)malloc(filename_len*sizeof(char));
+  strcpy(fs->file, filename);
+  fs->size = size;
+  fs->used = 0;
+  fs->mem = create_heap(size);
+
+  heap_node* node = heap_alloc(fs->mem, sizeof(inode));
+  inode* root_node = (inode*)calloc(1, sizeof(inode));
+  root_node->flag = INODE_DIR;
+  strcpy(root_node->name, "/");
+  root_node->next_ptr = 0;
+  root_node->data_ptr = 0;
+  node->data = root_node;
+
+  FILE* fp = fopen(filename, "w+b");
+  void* data = calloc(1, size);
+  fwrite(data, size, 1, fp);
+  free(data);
+  fseek(fp, node->file_offset, SEEK_SET);
+  fwrite(root_node, sizeof(inode), 1, fp);
+  fclose(fp);
+
+  return fs;
+}
+
+void filesystem_add_file(filesystem* fs, const char* path, const char* source)
+{
+  FILE* ifp = fopen(source, "rb");
+  fseek(ifp, 0, SEEK_END);
+  uint64_t size = ftell(ifp);
+  void* buffer = calloc(1, size);
+  fseek(ifp, 0, SEEK_SET);
+  fread(buffer, size, 1, ifp);
+  fclose(ifp);
+
+  make_file(fs, path, buffer, size);
+}
+
+void filesystem_get_file(filesystem* fs, const char* path, const char* destination)
+{
+  heap_node* node = find_file(fs, path);
 
   if(!node)
     return;
@@ -269,6 +281,18 @@ void filesystem_make_directory(filesystem* fs, const char* name)
   }
 
   free(copy);
+}
+
+void filesystem_copy_file(filesystem* fs, const char* src, const char* dst)
+{
+  heap_node* node = find_file(fs, src);
+  if(!node)
+    return;
+  
+  heap_node* file_data_segment = node->data_segment;
+  void* buffer = calloc(1, file_data_segment->size);
+  memcpy(buffer, file_data_segment->data, file_data_segment->size);
+  make_file(fs, dst, buffer, file_data_segment->size);
 }
 
 void destroy_filesystem(filesystem** fs)

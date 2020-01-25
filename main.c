@@ -16,6 +16,8 @@ int main()
   filesystem_add_file(fs, "dir2/test2.txt", "sample-files/test2.txt");
   filesystem_add_file(fs, "dir1/subdir/subsubdir/test3.txt", "sample-files/test3.txt");
 
+  filesystem_copy_file(fs, "dir1/test1.txt", "dir1/subdir/copy.txt");
+
   heap_print_info(fs->mem);
   filesystem_print_tree(fs);
 
@@ -24,6 +26,7 @@ int main()
   filesystem_get_file(fs, "dir1/test1.txt", "test_dir1.txt");
   filesystem_get_file(fs, "dir2/test2.txt", "test_dir2.txt");
   filesystem_get_file(fs, "dir1/subdir/subsubdir/test3.txt", "test3.txt");
+  filesystem_get_file(fs, "dir1/subdir/copy.txt", "test_copy.txt");
 
   destroy_filesystem(&fs);
   
