@@ -13,6 +13,7 @@ heap_node* create_heap_node(uint64_t size, uint64_t offset)
   node->data = NULL;
   node->data_segment = NULL;
   node->next_file_segment = NULL;
+  node->prev = NULL;
   node->next = NULL;
 
   return node;
@@ -64,7 +65,6 @@ heap_node* heap_alloc(heap* mem, uint64_t size)
     return NULL;
   
   heap_node* node = mem->root;
-  heap_node* prev = NULL;
   while(node)
   {
     if(!node->in_use && node->size >= size)
@@ -75,20 +75,51 @@ heap_node* heap_alloc(heap* mem, uint64_t size)
       heap_node* new_node = create_heap_node(size, offset);
       new_node->in_use = 1;
       new_node->next = node;
+      new_node->prev = node->prev;
+      node->prev = new_node;
       node->size -= size;
       node->file_offset += size;
-      if(prev)
-        prev->next = new_node;
+      if(new_node->prev)
+        new_node->prev->next = new_node;
       else
         mem->root = new_node;
 
       mem->used += size;
       return new_node;
     }
-    
-    prev = node;
     node = node->next;
   }
 
   return NULL;
+}
+
+void heap_consolidate(heap* mem)
+{
+  heap_node* node = mem->root;
+  while(node->next)
+  {
+    if(!node->in_use && !node->next->in_use)
+    {
+      heap_node* next = node->next;
+      node->next = next->next;
+      if(next->next)
+        next->next->prev = node;
+      node->size += next->size;
+      free(next);
+    }
+    else 
+      node = node->next;
+  }
+}
+
+void heap_dealloc(heap* mem, heap_node* node)
+{
+  node->in_use = 0;
+  node->next_file_segment = NULL;
+  mem->used -= node->size;
+  if(node->data)
+    free(node->data);
+  node->data = NULL;
+
+  heap_consolidate(mem);
 }

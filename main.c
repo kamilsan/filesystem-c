@@ -31,6 +31,17 @@ int main()
   filesystem_get_file(fs, "dir1/subdir/subsubdir/test3.txt", "test3.txt");
   filesystem_get_file(fs, "dir1/subdir/copy.txt", "test_copy.txt");
 
+  filesystem_delete_file(fs, "test1.txt");
+
+  filesystem_print_tree(fs);
+  heap_print_info(fs->mem);
+  
+  printf("Filesystem size: %ldb\nMemory used: %ldb (%.2f%%)\n", 
+    fs->size, fs->used, 100.0f*fs->used/fs->size);
+
+  filesystem_add_file(fs, "test1.txt", "sample-files/test1.txt");
+  filesystem_get_file(fs, "test1.txt", "test_delete.txt");
+
   destroy_filesystem(&fs);
   
   return 0;
