@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "segment_array.h"
+#include "filesystem.h"
+
 heap_node* create_heap_node(uint64_t size, uint64_t offset)
 {
   heap_node* node = (heap_node*)malloc(sizeof(heap_node));
@@ -25,6 +28,200 @@ heap* create_heap(uint64_t size)
   mem->size = size;
   mem->used = 0;
   mem->root = create_heap_node(size, 0);
+
+  return mem;
+}
+
+void get_directory_segments(segment_array* arr, inode* dir_node, FILE* fp, uint64_t idx)
+{
+  inode* node = (inode*)malloc(sizeof(inode));
+  fseek(fp, dir_node->data_ptr, SEEK_SET);
+  fread(node, sizeof(inode), 1, fp);
+  int first = 1;
+  uint64_t prev = 0;
+  uint64_t pos = ftell(fp) - sizeof(inode);
+  while(node)
+  {
+    segment inode_seg;
+    inode_seg.data = node;
+    inode_seg.start = pos;
+    inode_seg.size = sizeof(inode);
+    inode_seg.end = inode_seg.start + inode_seg.size;
+    inode_seg.data_ptr = NULL;
+    inode_seg.next_ptr = NULL;
+    segment_array_add(arr, inode_seg);
+    uint64_t inode_idx = arr->size - 1;
+    if(first)
+    {
+      segment_array_get(arr, idx)->data_ptr = segment_array_get(arr, inode_idx);
+      first = 0;
+    }
+    else
+    {
+      segment_array_get(arr, prev)->next_ptr = segment_array_get(arr, inode_idx);
+    }
+
+    if(node->flag == INODE_FILE)
+    {
+      segment data_seg;
+      data_seg.start = node->data_ptr;
+      data_seg.size = node->size;
+      data_seg.end = data_seg.start + data_seg.size;
+      data_seg.data_ptr = NULL;
+      data_seg.next_ptr = NULL;
+      void* buffer = malloc(node->size);
+      fseek(fp, node->data_ptr, SEEK_SET);
+      fread(buffer, node->size, 1, fp);
+      data_seg.data = buffer;
+      segment_array_add(arr, data_seg);
+      segment_array_get(arr, inode_idx)->data_ptr = segment_array_get(arr, arr->size - 1);
+    }
+    else if(node->flag == INODE_DIR)
+    {
+      if(node->data_ptr)
+        get_directory_segments(arr, node, fp, inode_idx);
+    }
+
+    prev = inode_idx;
+    if(node->next_ptr)
+    {
+      pos = node->next_ptr;
+      fseek(fp, node->next_ptr, SEEK_SET);
+      node = (inode*)malloc(sizeof(inode));
+      fread(node, sizeof(inode), 1, fp);
+    }
+    else
+      break;
+  }
+}
+
+void heap_add_segment(heap* heap, segment* seg, FILE* fp)
+{
+  heap_node* new_node = seg->node;
+  heap->used += new_node->size;
+
+  if(!heap->root)
+    heap->root = new_node;
+  else
+  {
+    heap_node* node = heap->root;
+    while(node->next)
+      node = node->next;
+    node->next = new_node;
+    new_node->prev = node;
+  }
+}
+
+void heap_add_hole(heap* heap, uint64_t size, uint64_t off)
+{
+  heap_node* new_node = (heap_node*)malloc(sizeof(heap_node));
+  new_node->in_use = 0;
+  new_node->file_offset = off;
+  new_node->size = size;
+  new_node->data = NULL;
+  new_node->data_segment = NULL;
+  new_node->next_file_segment = NULL;
+  new_node->prev = NULL;
+  new_node->next = NULL;
+
+  if(!heap->root)
+    heap->root = new_node;
+  else
+  {
+    heap_node* node = heap->root;
+    while(node->next)
+      node = node->next;
+    node->next = new_node;
+    new_node->prev = node;
+  }
+}
+
+heap* heap_deserialize(const char* filename, uint64_t size)
+{
+  heap* mem = (heap*)malloc(sizeof(heap));
+  mem->size = size;
+  mem->used = 0;
+  mem->root = NULL;
+  
+  segment_array* arr = create_segment_array();
+  inode* node = (inode*)malloc(sizeof(inode));
+  FILE* fp = fopen(filename, "rb");
+  fread(node, sizeof(inode), 1, fp);
+
+  segment s;
+  s.start = 0;
+  s.size = sizeof(inode);
+  s.end = s.start + s.size;
+  s.data_ptr = NULL;
+  s.next_ptr = NULL;
+  s.data = node;
+  segment_array_add(arr, s);
+  get_directory_segments(arr, node, fp, 0);
+
+  for(uint64_t i = 0; i < arr->size; ++i)
+  {
+    segment* seg = segment_array_get(arr, i);
+    seg->node = (heap_node*)malloc(sizeof(heap_node));
+    seg->node->in_use = 1;
+    seg->node->file_offset = seg->start;
+    seg->node->size = seg->size;
+    seg->node->data = seg->data;
+    seg->node->data_segment = NULL;
+    seg->node->next_file_segment = NULL;
+    seg->node->prev = NULL;
+    seg->node->next = NULL;
+  }
+
+  // Connect the segments
+  for(uint64_t i = 0; i < arr->size; ++i)
+  {
+    segment* seg = segment_array_get(arr, i);
+    heap_node* node = seg->node;
+
+    if(seg->next_ptr)
+    {
+      uint64_t start = seg->next_ptr->start;
+      for(uint64_t j = 0; j < arr->size; ++j)
+      {
+        if(segment_array_get(arr, j)->start == start)
+        {
+          node->next_file_segment = segment_array_get(arr, j)->node;
+          break;
+        }
+      }
+    }
+
+    if(seg->data_ptr)
+    {
+      uint64_t start = seg->data_ptr->start;
+      for(uint64_t j = 0; j < arr->size; ++j)
+      {
+        if(segment_array_get(arr, j)->start == start)
+        {
+          node->data_segment = segment_array_get(arr, j)->node;
+          break;
+        }
+      }
+    }
+  }
+
+  segment_array_sort(arr);
+  uint64_t prev_segment_end = 0;
+  for(uint64_t i = 0; i < arr->size; ++i)
+  {
+    segment* seg = segment_array_get(arr, i);
+    uint64_t gap_size = seg->start - prev_segment_end;
+    if(gap_size > 0)
+      heap_add_hole(mem, gap_size, prev_segment_end);
+    prev_segment_end = seg->end;
+    heap_add_segment(mem, seg, fp);
+  }
+  uint64_t free_space = mem->size - prev_segment_end;
+  if(free_space > 0)
+    heap_add_hole(mem, free_space, prev_segment_end);
+
+  segment_array_destroy(&arr);
+  fclose(fp);
 
   return mem;
 }

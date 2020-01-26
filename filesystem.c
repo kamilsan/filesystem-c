@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "filesystem.h"
+#include "heap.h"
 
 heap_node* find_directory(filesystem* fs, const char* name)
 {
@@ -244,11 +245,6 @@ heap_node* find_file(filesystem* fs, const char* path)
 }
 
 
-void filesystem_print_tree(filesystem* fs)
-{
-  heap_node* root = fs->mem->root;
-  print_dir(root, 0);
-}
 
 filesystem* create_filesystem(const char* filename, uint64_t size)
 {
@@ -280,6 +276,30 @@ filesystem* create_filesystem(const char* filename, uint64_t size)
   fclose(fp);
 
   return fs;
+}
+
+filesystem* filesystem_open(const char* filename)
+{
+  FILE* fp = fopen(filename, "rb");
+  fseek(fp, 0, SEEK_END);
+  uint64_t size = ftell(fp);
+  fclose(fp);
+
+  filesystem* fs = (filesystem*)malloc(sizeof(filesystem));
+  size_t filename_len = strlen(filename) + 1;
+  fs->file = (char*)malloc(filename_len*sizeof(char));
+  strcpy(fs->file, filename);
+  fs->size = size;
+  fs->mem = heap_deserialize(filename, size);
+  fs->used = fs->mem->used;
+
+  return fs;
+}
+
+void filesystem_print_tree(filesystem* fs)
+{
+  heap_node* root = fs->mem->root;
+  print_dir(root, 0);
 }
 
 int filesystem_add_file(filesystem* fs, const char* path, const char* source)

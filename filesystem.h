@@ -1,10 +1,12 @@
 #pragma once
 
-#include "heap.h"
+#include <stdint.h>
 
 #define INODE_FILE 0
 #define INODE_DIR 1
 #define MAX_FILENAME_LEN 20
+
+struct heap;
 
 typedef struct inode
 {
@@ -20,10 +22,11 @@ typedef struct filesystem
   char* file;
   uint64_t size;
   uint64_t used;
-  heap* mem;
+  struct heap* mem;
 } filesystem;
 
 filesystem* create_filesystem(const char* filename, uint64_t size);
+filesystem* filesystem_open(const char* filename);
 void filesystem_print_tree(filesystem* fs);
 int filesystem_add_file(filesystem* fs, const char* filename, const char* source);
 int filesystem_get_file(filesystem* fs, const char* filename, const char* destination);

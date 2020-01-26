@@ -23,6 +23,7 @@ typedef struct heap
 
 heap_node* create_heap_node(uint64_t size, uint64_t offset);
 heap* create_heap(uint64_t size);
+heap* heap_deserialize(const char* filename, uint64_t size);
 void destroy_heap(heap** mem);
 void heap_print_info(heap* mem);
 heap_node* heap_alloc(heap* mem, uint64_t size);
