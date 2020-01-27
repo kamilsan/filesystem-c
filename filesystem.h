@@ -35,4 +35,5 @@ int filesystem_make_directory(filesystem* fs, const char* filename);
 int filesystem_make_link(filesystem* fs, const char* src, const char* dst);
 int filesystem_copy_file(filesystem* fs, const char* src, const char* dst);
 int filesystem_delete_file(filesystem* fs, const char* file);
+int filesystem_resize_file(filesystem* fs, const char* file, uint64_t new_size);
 void destroy_filesystem(filesystem** fs);

@@ -10,6 +10,7 @@ void handle_file_addition(cli_context* context);
 void handle_file_getting(cli_context* context);
 void handle_file_copying(cli_context* context);
 void handle_file_removing(cli_context* context);
+void handle_file_resizing(cli_context* context);
 void handle_making_directory(cli_context* context);
 void handle_making_link(cli_context* context);
 
@@ -109,12 +110,13 @@ void handle_vd_open(cli_context* context)
     puts("2. Get file");
     puts("3. Remove file");
     puts("4. Copy file");
-    puts("5. Make file link");
-    puts("6. Make directory");
-    puts("7. Print filesystem tree");
-    puts("8. Print basic info");
-    puts("9. Print advanced info");
-    puts("10. Exit");
+    puts("5. Resize file");
+    puts("6. Make file link");
+    puts("7. Make directory");
+    puts("8. Print filesystem tree");
+    puts("9. Print basic info");
+    puts("10. Print advanced info");
+    puts("11. Exit");
     printf(">>>");
     if(scanf("%i", &choice) == 0)
     {
@@ -123,7 +125,7 @@ void handle_vd_open(cli_context* context)
       puts("");
       continue;
     }
-  } while(choice < 1 || choice > 10);
+  } while(choice < 1 || choice > 11);
 
   switch(choice)
   {
@@ -140,20 +142,23 @@ void handle_vd_open(cli_context* context)
       handle_file_copying(context);
       break;
     case 5:
-      handle_making_link(context);
+      handle_file_resizing(context);
       break;
     case 6:
-      handle_making_directory(context);
+      handle_making_link(context);
       break;
     case 7:
+      handle_making_directory(context);
+      break;
+    case 8:
       puts("");
       filesystem_print_tree(context->fs);
       break;
-    case 8:
+    case 9:
       printf("\nFilesystem size: %ld bytes\nSpace used: %ld bytes (%.2f%%)\n", 
         context->fs->size, context->fs->used, 100.0f*context->fs->used/context->fs->size);
       break;
-    case 9:
+    case 10:
       puts("");
       heap_print_info(context->fs->mem);
       break;
@@ -221,6 +226,33 @@ void handle_file_removing(cli_context* context)
   if(res != 0)
   {
     puts("ERROR: Failed to delete specified file!");
+  }
+}
+
+void handle_file_resizing(cli_context* context)
+{
+  char filename[31];
+  printf("Enter file name: ");
+  user_read_line(filename, 30);
+  uint64_t size = 0;
+  int valid = 0;
+  do
+  {
+    printf("Enter new file size: ");
+    if(scanf("%lud", &size) == 0)
+    {
+      char c;
+      while ((c = getchar()) != '\n' && c != EOF);
+      puts("");
+      continue;
+    }
+    valid = 1;
+  } while(!valid);
+
+  int res = filesystem_resize_file(context->fs, filename, size);
+  if(res != 0)
+  {
+    puts("ERROR: Failed to resize specified file!");
   }
 }
 

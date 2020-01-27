@@ -510,6 +510,42 @@ int filesystem_delete_file(filesystem* fs, const char* file)
   return 0;
 }
 
+int filesystem_resize_file(filesystem* fs, const char* file, uint64_t new_size)
+{
+  heap_node* node = find_file(fs, file);
+  if(!node)
+    return -1;
+  
+  heap_node* file_data_segment = node->data_segment;
+  heap_node* new_data = heap_alloc(fs->mem, new_size);
+  if(!new_size)
+    return -1;
+
+  void* new_buffer = calloc(1, new_size);
+  uint64_t to_copy = file_data_segment->size;
+  if(new_size < to_copy)
+    to_copy = new_size;
+  memcpy(new_buffer, file_data_segment->data, to_copy);
+
+  inode* file_inode = (inode*)node->data;
+  fs->used += new_size - file_inode->size;
+  file_inode->size = new_size;
+  new_data->data = new_buffer;
+  file_inode->data_ptr = new_data->file_offset;
+  node->data_segment = new_data;
+
+  heap_dealloc(fs->mem, file_data_segment);
+  
+  FILE* fp = fopen(fs->file, "r+b");
+  fseek(fp, node->file_offset, SEEK_SET);
+  fwrite(file_inode, sizeof(inode), 1, fp);
+  fseek(fp, new_data->file_offset, SEEK_SET);
+  fwrite(new_buffer, new_size, 1, fp);
+  fclose(fp);
+
+  return 0;
+}
+
 void destroy_filesystem(filesystem** fs)
 {
   destroy_heap(&(*fs)->mem);
