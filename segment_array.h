@@ -10,8 +10,8 @@ typedef struct segment
   uint64_t end;
   uint64_t size;
   void* data;
-  struct segment* next_ptr;
-  struct segment* data_ptr;
+  uint64_t next_ptr;
+  uint64_t data_ptr;
   struct heap_node* node;
 } segment;
 

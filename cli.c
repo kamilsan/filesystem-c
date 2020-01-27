@@ -11,6 +11,7 @@ void handle_file_getting(cli_context* context);
 void handle_file_copying(cli_context* context);
 void handle_file_removing(cli_context* context);
 void handle_making_directory(cli_context* context);
+void handle_making_link(cli_context* context);
 
 void user_read_line(char* dest, size_t maxLen)
 {
@@ -108,11 +109,12 @@ void handle_vd_open(cli_context* context)
     puts("2. Get file");
     puts("3. Remove file");
     puts("4. Copy file");
-    puts("5. Make directory");
-    puts("6. Print filesystem tree");
-    puts("7. Print basic info");
-    puts("8. Print advanced info");
-    puts("9. Exit");
+    puts("5. Make file link");
+    puts("6. Make directory");
+    puts("7. Print filesystem tree");
+    puts("8. Print basic info");
+    puts("9. Print advanced info");
+    puts("10. Exit");
     printf(">>>");
     if(scanf("%i", &choice) == 0)
     {
@@ -121,7 +123,7 @@ void handle_vd_open(cli_context* context)
       puts("");
       continue;
     }
-  } while(choice < 1 || choice > 9);
+  } while(choice < 1 || choice > 10);
 
   switch(choice)
   {
@@ -138,17 +140,20 @@ void handle_vd_open(cli_context* context)
       handle_file_copying(context);
       break;
     case 5:
-      handle_making_directory(context);
+      handle_making_link(context);
       break;
     case 6:
+      handle_making_directory(context);
+      break;
+    case 7:
       puts("");
       filesystem_print_tree(context->fs);
       break;
-    case 7:
+    case 8:
       printf("\nFilesystem size: %ld bytes\nSpace used: %ld bytes (%.2f%%)\n", 
         context->fs->size, context->fs->used, 100.0f*context->fs->used/context->fs->size);
       break;
-    case 8:
+    case 9:
       puts("");
       heap_print_info(context->fs->mem);
       break;
@@ -219,6 +224,22 @@ void handle_file_removing(cli_context* context)
   }
 }
 
+void handle_making_link(cli_context* context)
+{
+  char dst_filename[31];
+  char link_name[31];
+  printf("Enter destination file name: ");
+  user_read_line(dst_filename, 30);
+  printf("Enter link name: ");
+  user_read_line(link_name, 30);
+
+  int res = filesystem_make_link(context->fs, dst_filename, link_name);
+  if(res != 0)
+  {
+    puts("ERROR: Failed to make link to a specified file!");
+  }
+}
+
 void handle_making_directory(cli_context* context)
 {
   char directory[31];
@@ -241,21 +262,6 @@ void handle_current_state(cli_context* context)
       break;
     case CLI_VD_OPEN:
       handle_vd_open(context);
-      break;
-    case CLI_ADD_FILE:
-      handle_file_addition(context);
-      break;
-    case CLI_GET_FILE:
-      handle_file_getting(context);
-      break;
-    case CLI_COPY_FILE:
-      handle_file_copying(context);
-      break;
-    case CLI_REMOVE_FILE:
-      handle_file_removing(context);
-      break;
-    case CLI_MAKE_DIR:
-      handle_making_directory(context);
       break;
     default:
       context->state = CLI_EXIT;

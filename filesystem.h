@@ -4,6 +4,7 @@
 
 #define INODE_FILE 0
 #define INODE_DIR 1
+#define INODE_LINK 2
 #define MAX_FILENAME_LEN 20
 
 struct heap;
@@ -31,6 +32,7 @@ void filesystem_print_tree(filesystem* fs);
 int filesystem_add_file(filesystem* fs, const char* filename, const char* source);
 int filesystem_get_file(filesystem* fs, const char* filename, const char* destination);
 int filesystem_make_directory(filesystem* fs, const char* filename);
+int filesystem_make_link(filesystem* fs, const char* src, const char* dst);
 int filesystem_copy_file(filesystem* fs, const char* src, const char* dst);
 int filesystem_delete_file(filesystem* fs, const char* file);
 void destroy_filesystem(filesystem** fs);

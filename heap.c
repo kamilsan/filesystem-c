@@ -37,8 +37,6 @@ void get_directory_segments(segment_array* arr, inode* dir_node, FILE* fp, uint6
   inode* node = (inode*)malloc(sizeof(inode));
   fseek(fp, dir_node->data_ptr, SEEK_SET);
   fread(node, sizeof(inode), 1, fp);
-  int first = 1;
-  uint64_t prev = 0;
   uint64_t pos = ftell(fp) - sizeof(inode);
   while(node)
   {
@@ -47,19 +45,10 @@ void get_directory_segments(segment_array* arr, inode* dir_node, FILE* fp, uint6
     inode_seg.start = pos;
     inode_seg.size = sizeof(inode);
     inode_seg.end = inode_seg.start + inode_seg.size;
-    inode_seg.data_ptr = NULL;
-    inode_seg.next_ptr = NULL;
+    inode_seg.next_ptr = node->next_ptr;
+    inode_seg.data_ptr = node->data_ptr;
     segment_array_add(arr, inode_seg);
     uint64_t inode_idx = arr->size - 1;
-    if(first)
-    {
-      segment_array_get(arr, idx)->data_ptr = segment_array_get(arr, inode_idx);
-      first = 0;
-    }
-    else
-    {
-      segment_array_get(arr, prev)->next_ptr = segment_array_get(arr, inode_idx);
-    }
 
     if(node->flag == INODE_FILE)
     {
@@ -67,14 +56,13 @@ void get_directory_segments(segment_array* arr, inode* dir_node, FILE* fp, uint6
       data_seg.start = node->data_ptr;
       data_seg.size = node->size;
       data_seg.end = data_seg.start + data_seg.size;
-      data_seg.data_ptr = NULL;
-      data_seg.next_ptr = NULL;
+      data_seg.data_ptr = 0;
+      data_seg.next_ptr = 0;
       void* buffer = malloc(node->size);
       fseek(fp, node->data_ptr, SEEK_SET);
       fread(buffer, node->size, 1, fp);
       data_seg.data = buffer;
       segment_array_add(arr, data_seg);
-      segment_array_get(arr, inode_idx)->data_ptr = segment_array_get(arr, arr->size - 1);
     }
     else if(node->flag == INODE_DIR)
     {
@@ -82,7 +70,6 @@ void get_directory_segments(segment_array* arr, inode* dir_node, FILE* fp, uint6
         get_directory_segments(arr, node, fp, inode_idx);
     }
 
-    prev = inode_idx;
     if(node->next_ptr)
     {
       pos = node->next_ptr;
@@ -152,8 +139,8 @@ heap* heap_deserialize(const char* filename, uint64_t size)
   s.start = 0;
   s.size = sizeof(inode);
   s.end = s.start + s.size;
-  s.data_ptr = NULL;
-  s.next_ptr = NULL;
+  s.data_ptr = node->data_ptr;
+  s.next_ptr = node->next_ptr;
   s.data = node;
   segment_array_add(arr, s);
   get_directory_segments(arr, node, fp, 0);
@@ -180,7 +167,7 @@ heap* heap_deserialize(const char* filename, uint64_t size)
 
     if(seg->next_ptr)
     {
-      uint64_t start = seg->next_ptr->start;
+      uint64_t start = seg->next_ptr;
       for(uint64_t j = 0; j < arr->size; ++j)
       {
         if(segment_array_get(arr, j)->start == start)
@@ -193,7 +180,7 @@ heap* heap_deserialize(const char* filename, uint64_t size)
 
     if(seg->data_ptr)
     {
-      uint64_t start = seg->data_ptr->start;
+      uint64_t start = seg->data_ptr;
       for(uint64_t j = 0; j < arr->size; ++j)
       {
         if(segment_array_get(arr, j)->start == start)

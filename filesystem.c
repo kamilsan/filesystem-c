@@ -80,6 +80,12 @@ void print_dir(heap_node* node, int pad)
         putchar(' ');
       printf("%s (%ldb)\n", i->name, i->size);
     }
+    else if(i->flag == INODE_LINK)
+    {
+      for(int i = 0; i < pad; ++i)
+        putchar(' ');
+      printf("\033[33;1m%s\033[0m\n", i->name, i->size);
+    }
     else if(i->flag == INODE_DIR)
     {
       print_dir(file_node, pad);
@@ -352,6 +358,71 @@ int filesystem_make_directory(filesystem* fs, const char* name)
   return 0;
 }
 
+int filesystem_make_link(filesystem* fs, const char* src, const char* dst)
+{
+  heap_node* node = find_file(fs, src);
+  if(!node)
+    return -1;
+  
+  heap_node* file_data_segment = node->data_segment;
+  char* directory = NULL;
+  char* filename = NULL;
+  int res = directory_filename_split(dst, &directory, &filename);
+
+  heap_node* last_node = res == 0 ? find_directory(fs, directory) : fs->mem->root;
+  int dir_empty = 1;
+  if(last_node->data_segment)
+  {
+    dir_empty = 0;
+    last_node = last_node->data_segment;
+    while(last_node->next_file_segment)
+      last_node = last_node->next_file_segment;
+  }
+  inode* last_inode = (inode*)last_node->data;
+
+  heap_node* heap_inode = heap_alloc(fs->mem, sizeof(inode));
+  if(!heap_inode)
+  {
+    if(directory)
+      free(directory);
+    free(filename);
+    return -1;
+  }
+  fs->used += sizeof(inode);
+  inode* file_inode = (inode*)calloc(1, sizeof(inode));
+  file_inode->flag = INODE_LINK;
+  strcpy(file_inode->name, filename);
+  file_inode->size = 0;
+  file_inode->next_ptr = 0;
+  heap_inode->data = file_inode;
+
+  if(directory)
+    free(directory);
+  free(filename);
+
+  file_inode->data_ptr = node->data_segment->file_offset;
+  heap_inode->data_segment = node->data_segment;
+
+  if(dir_empty)
+  {
+    last_node->data_segment = heap_inode;
+    last_inode->data_ptr = heap_inode->file_offset;
+  }
+  else
+  {
+    last_node->next_file_segment = heap_inode;
+    last_inode->next_ptr = heap_inode->file_offset;
+  }
+  
+  FILE* fp = fopen(fs->file, "r+b");
+  fseek(fp, last_node->file_offset, SEEK_SET);
+  fwrite(last_inode, sizeof(inode), 1, fp);
+  
+  fseek(fp, heap_inode->file_offset, SEEK_SET);
+  fwrite(file_inode, sizeof(inode), 1, fp);
+  fclose(fp);
+}
+
 int filesystem_copy_file(filesystem* fs, const char* src, const char* dst)
 {
   heap_node* node = find_file(fs, src);
@@ -412,7 +483,7 @@ int filesystem_delete_file(filesystem* fs, const char* file)
 
   inode* prev_inode = (inode*)prev->data;
   inode* file_inode = (inode*)node->data;
-  if(prev_inode->flag == INODE_FILE || !first_child)
+  if(prev_inode->flag != INODE_DIR || !first_child)
   {
     prev_inode->next_ptr = file_inode->next_ptr;
     prev->next_file_segment = node->next_file_segment;
@@ -424,9 +495,12 @@ int filesystem_delete_file(filesystem* fs, const char* file)
   }
 
   fs->used -= sizeof(inode);
-  fs->used -= file_inode->size;
+  if(file_inode->flag == INODE_FILE)
+  {
+    fs->used -= file_inode->size;
+    heap_dealloc(fs->mem, node->data_segment);
+  }
   heap_dealloc(fs->mem, node);
-  heap_dealloc(fs->mem, node->data_segment);
 
   FILE* fp = fopen(fs->file, "r+b");
   fseek(fp, prev->file_offset, SEEK_SET);
